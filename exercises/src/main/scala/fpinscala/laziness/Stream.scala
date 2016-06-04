@@ -18,35 +18,72 @@ trait Stream[+A] {
     case Cons(h, t) => if (f(h())) Some(h()) else t().find(f)
   }
 
-  def toList: List[A] = sys.error("todo")
+  def toList: List[A] = this match {
+    case Empty => Nil
+    case Cons(x, xs) => x() :: xs().toList
+  }
 
-  def take(n: Int): Stream[A] = sys.error("todo")
+  def take(n: Int): Stream[A] = this match {
+    case Cons(x, xs) if n > 1 => cons(x(), xs().take(n - 1))
+    case Cons(x, xs) if n == 1 => cons(x(), empty)
+    case _ => Empty
+  }
 
-  def takeViaUnfold(n: Int): Stream[A] = sys.error("todo")
+  def takeViaUnfold(n: Int): Stream[A] = 
+    unfold((this, n)) {
+      case (Cons(x, xs), n) if n > 1 => Option((x(), (xs(), n - 1)))
+      case (Cons(x, _), n) if n == 1 => Option((x(), (empty, n - 1)))
+      case _ => None
+  }
 
-  def drop(n: Int): Stream[A] = sys.error("todo")
+  def drop(n: Int): Stream[A] = this match {
+    case Cons(x, xs) if n > 0 => xs().drop(n - 1)
+    case _ => this 
+  }
 
-  def takeWhile(p: A => Boolean): Stream[A] = sys.error("todo")
+  def takeWhile(p: A => Boolean): Stream[A] = this match {
+    case Cons(x, xs) if (p(x())) => cons(x(), xs().takeWhile(p))
+    case _ => Empty
+  }
 
-  def takeWhileViaUnfold(p: A => Boolean): Stream[A] = sys.error("todo")
+  def takeWhileViaUnfold(p: A => Boolean): Stream[A] = 
+    unfold(this) {
+    case Cons(x, xs) if p(x()) => Option((x(), xs()))
+    case _ => None
+    }
 
-  def forAll(p: A => Boolean): Boolean = sys.error("todo")
+  def forAll(p: A => Boolean): Boolean = 
+    foldRight(true)((e, acc) => p(e) && acc)
 
-  def takeWhileViaFoldRight(p: A => Boolean): Stream[A] = sys.error("todo")
+  def takeWhileViaFoldRight(p: A => Boolean): Stream[A] = 
+    foldRight(Empty: Stream[A])((e, acc) => if (p(e)) cons(e, acc) else empty)
 
-  def headOption: Option[A] = sys.error("todo")
+  def headOption: Option[A] = 
+    foldRight(None: Option[A])((e, _) => Option(e))
 
-  def map[B](f: A => B): Stream[B] = sys.error("todo")
+  def map[B](f: A => B): Stream[B] = 
+    foldRight(Empty: Stream[B])((e, acc) => cons(f(e), acc))
 
-  def mapViaUnfold[B](f: A => B): Stream[B] = sys.error("todo")
+  def mapViaUnfold[B](f: A => B): Stream[B] = 
+    unfold(this) {
+    case Cons(x, xs) => Option(f(x()), xs())
+    case _ => None
+    }
 
-  def filter(p: A => Boolean): Stream[A] = sys.error("todo")
+  def filter(p: A => Boolean): Stream[A] = 
+    foldRight(Empty: Stream[A])((e, acc) => if (p(e)) cons(e, acc) else acc)
 
-  def append[B>:A](other: Stream[B]): Stream[B] = sys.error("todo")
+  def append[B>:A](other: => Stream[B]): Stream[B] = 
+    foldRight(other)((e, acc) => cons(e, acc))
 
-  def flatMap[B](f: A => Stream[B]): Stream[B] = sys.error("todo")
+  def flatMap[B](f: A => Stream[B]): Stream[B] = 
+    foldRight(Empty: Stream[B])((e, acc) => f(e).append(acc))
 
-  def zipWith[B,C](s2: Stream[B])(f: (A,B) => C): Stream[C] = sys.error("todo")
+  def zipWith[B,C](s2: Stream[B])(f: (A,B) => C): Stream[C] = unfold((this, s2)) {
+    case (_, Empty) => None
+    case (Empty, _) => None
+    case (Cons(x, xs), Cons(y, ys)) => Option(f(x(), y()), (xs(), ys()))
+  }
 
   def zipAll[B](s2: Stream[B]): Stream[(Option[A], Option[B])] = sys.error("todo")
 
@@ -74,19 +111,33 @@ object Stream {
 
   val ones: Stream[Int] = Stream.cons(1, ones)
 
-  def constant[A](a: A): Stream[A] = sys.error("todo")
+  def constant[A](a: A): Stream[A] = 
+    Stream.cons(a, constant(a))
 
-  def from(n: Int): Stream[Int] = sys.error("todo")
+  def from(n: Int): Stream[Int] = 
+    Stream.cons(n, from(n+1))
 
-  lazy val fibs: Stream[Int] = sys.error("todo")
+  lazy val fibs: Stream[Int] = {
+      def fibsLoop(a: Int, b: Int): Stream[Int] =
+        cons(a, fibsLoop(b, a + b))
+      fibsLoop(0, 1)
+    }
+    
 
-  def unfold[A, S](z: S)(f: S => Option[(A, S)]): Stream[A] = sys.error("todo")
+  def unfold[A, S](z: S)(f: S => Option[(A, S)]): Stream[A] = f(z) match {
+    case None => Empty
+    case Some((a, s)) => Stream.cons(a, unfold(s)(f))
+  }
 
-  lazy val fibsViaUnfold: Stream[Int] = sys.error("todo")
+  lazy val fibsViaUnfold: Stream[Int] = 
+    unfold((0, 1)){ case (a, b) => Option(a, (b, a + b)) }
 
-  def fromViaUnfold(n: Int): Stream[Int] = sys.error("todo")
+  def fromViaUnfold(n: Int): Stream[Int] = 
+    unfold(n)(a => Option(a, a + 1))
 
-  def constantViaUnfold[A](a: A): Stream[A] = sys.error("todo")
+  def constantViaUnfold[A](a: A): Stream[A] =
+    unfold(a)(a => Option(a, a))
 
-  lazy val onesViaUnfold: Stream[Int] = sys.error("todo")
+  lazy val onesViaUnfold: Stream[Int] = 
+  constantViaUnfold(1)
 }
