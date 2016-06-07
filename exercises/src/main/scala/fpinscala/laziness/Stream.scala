@@ -85,13 +85,29 @@ trait Stream[+A] {
     case (Cons(x, xs), Cons(y, ys)) => Option(f(x(), y()), (xs(), ys()))
   }
 
-  def zipAll[B](s2: Stream[B]): Stream[(Option[A], Option[B])] = sys.error("todo")
+  def zipAll[B](s2: Stream[B]): Stream[(Option[A], Option[B])] = unfold((this, s2)) {
+    case (Empty, Empty) => None
+    case (Cons(x, xs), Empty) => Some((Some(x()), None) -> (xs(), Empty))
+    case (Empty, Cons(y, ys)) => Some((None, Some(y())) -> (Empty, ys()))
+    case (Cons(x, xs), Cons(y, ys)) => Some((Some(x()), Some(y())) -> (xs(), ys()))
+  }
 
-  def startsWith[B](s: Stream[B]): Boolean = sys.error("todo")
+  def startsWith[B](s: Stream[B]): Boolean = 
+    this.zipAll(s).takeWhile(!_._2.isEmpty).forAll {
+    case (x, y) => x == y
+  }
 
-  def tails: Stream[Stream[A]] = sys.error("todo using unfold")
+  def tails: Stream[Stream[A]] =
+    unfold(this) {
+    case Empty => None
+    case xs => Some((xs, xs drop 1))
+  }.append(Stream(empty))
 
-  def scanRight[B](s: B)(f: (A, B) => B): Stream[B] = sys.error("todo")
+  def scanRight[B](s: B)(f: (A, B) => B): Stream[B] = 
+    foldRight((s, Stream(s)))((e, acc) => {
+      lazy val h = f(e, acc._1)
+      (h, cons(h, acc._2))
+    })._2
 }
 case object Empty extends Stream[Nothing]
 case class Cons[+A](h: () => A, t: () => Stream[A]) extends Stream[A]
