@@ -15,7 +15,9 @@ shell, which you can fill in and modify while working through the chapter.
 
 trait Prop0 { self =>
   def check: Boolean
-  def &&(p: Prop0): Prop0 = ???
+  def &&(p: Prop0): Prop0 = 
+    if (self.check) p 
+    else self
 }
 
 trait Prop1 { self =>
@@ -81,12 +83,15 @@ object ListProps {
 }
 
 object Gen {
-  def unit[A](a: => A): Gen[A] = ???
+  def unit[A](a: => A): Gen[A] = 
+    Gen(State(RNG.int).map(x => a))
 
-  def choose(start: Int, stopExclusive: Int): Gen[Int] = ???
+  def choose(start: Int, stopExclusive: Int): Gen[Int] = 
+    Gen(State(RNG.nonNegativeInt).map(x => start + x % (stopExclusive - start)))
 
-  def boolean: Gen[Boolean] = ???
-
+  def boolean: Gen[Boolean] = 
+    Gen(State(RNG.nonNegativeInt).map(_ % 2 == 0))
+        
   def double: Gen[Double] =
     Gen(State(RNG.double))
 
@@ -97,8 +102,9 @@ object Gen {
         a <- gen
       } yield if (b) Some(a) else None
 
-  def listOfN[A](n: Int, g: Gen[A]): Gen[List[A]] = ???
-
+  def listOfN[A](n: Int, g: Gen[A]): Gen[List[A]] = 
+    Gen(State.sequence(List.fill(n)(g.sample)))
+        
   def stringN(n: Int): Gen[String] = ???
 
   def union[A](g1: Gen[A], g2: Gen[A]): Gen[A] = ???
