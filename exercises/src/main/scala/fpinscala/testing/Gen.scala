@@ -31,19 +31,33 @@ trait Prop1 { self =>
     }
 }
 
-case class Prop(run: (TestCases,RNG) => Result) {
-  def &&(p: Prop): Prop = ???
-
-  def ||(p: Prop): Prop = ???
-
-  def tag(msg: String) = Prop { (tc,rng) =>
-    run(tc, rng) match {
-      case Falsified(e, c) => Falsified(msg + "\n" + e, c)
-      case x => x
+case class Prop(run: (TestCases, RNG) => Result) {
+  def &&(p: Prop) = Prop {
+    (n, rng) =>
+    run(n, rng) match {
+      case Passed => p.run(n, rng)
+      case x      => x
     }
   }
-}
 
+  def ||(p: Prop) = Prop {
+    (n, rng) =>
+      run(n, rng) match {
+        // In case of failure, run the other prop.
+        case Falsified(msg, _) => p.tag(msg).run(n, rng)
+        case x                 => x
+      }
+  }
+
+  def tag(msg: String) = Prop {
+    (n, rng) =>
+      run(n, rng) match {
+        case Falsified(e, c) => Falsified(msg + "\n" + e, c)
+        case x               => x
+      }
+
+}
+}
 object Prop {
   type FailedCase = String
   type SuccessCount = Int
@@ -107,11 +121,17 @@ object Gen {
         
   def stringN(n: Int): Gen[String] = ???
 
-  def union[A](g1: Gen[A], g2: Gen[A]): Gen[A] = ???
+  def union[A](g1: Gen[A], g2: Gen[A]): Gen[A] = 
+    boolean flatMap (if(_) g1 else g2)
 
-  def weighted[A](g1: (Gen[A],Double), g2: (Gen[A],Double)): Gen[A] = ???
+  def weighted[A](g1: (Gen[A],Double), g2: (Gen[A],Double)): Gen[A] = {
+        val tippingPoint = g1._2.abs / (g1._2.abs + g2._2.abs)
+        double.flatMap(d => if (d < tippingPoint) g1._1 else g2._1)
+      }
+    
 
-  def listOf[A](g: Gen[A]): SGen[List[A]] = ???
+  def listOf[A](g: Gen[A]): SGen[List[A]] = 
+    SGen(g.listOfN(_))
 
   def listOf1[A](g: Gen[A]): SGen[List[A]] = ???
 
@@ -119,14 +139,17 @@ object Gen {
 }
 
 case class Gen[+A](sample: State[RNG,A]) {
-  def map[B](f: A => B): Gen[B] = ???
+  def map[B](f: A => B): Gen[B] = 
+    flatMap(_ => Gen(sample.map(f)))
 
-  def flatMap[B](f: A => Gen[B]): Gen[B] = ???
-
+  def flatMap[B](f: A => Gen[B]): Gen[B] = 
+    Gen(sample.flatMap(f(_).sample))
+    
   def map2[B,C](g: Gen[B])(f: (A,B) => C): Gen[C] =
     Gen(sample.map2(g.sample)(f))
 
-  def listOfN(size: Int): Gen[List[A]] = ???
+  def listOfN(size: Int): Gen[List[A]] = 
+    Gen.listOfN(size, this)
 
   def listOfN(size: Gen[Int]): Gen[List[A]] =
     size flatMap (Gen.listOfN(_, this))
@@ -138,15 +161,18 @@ case class Gen[+A](sample: State[RNG,A]) {
   def **[B](g: Gen[B]): Gen[(A,B)] =
     (this map2 g)((_,_))
 
-  def unsized: SGen[A] = ???
+  def unsized: SGen[A] = 
+    SGen(_ => this)
 }
 
 case class SGen[+A](forSize: Int => Gen[A]) {
-  def apply(n: Int): Gen[A] = ???
+  def apply(n: Int): Gen[A] = forSize(n)
 
-  def map[B](f: A => B): SGen[B] = ???
+  def map[B](f: A => B): SGen[B] = 
+    SGen(forSize.andThen(_.map(f)))
 
-  def flatMap[B](f: A => SGen[B]): SGen[B] = ???
+  def flatMap[B](f: A => Gen[B]): SGen[B] = 
+    SGen(forSize.andThen(_.flatMap(f)))
 
   def **[B](s2: SGen[B]): SGen[(A,B)] = ???
 }
